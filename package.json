@@ -1,8 +1,13 @@
 {
   "dependencies": {
+    "@google/genai": "^0.7.0",
+    "axios": "^1.8.4",
+    "body-parser": "^2.2.0",
     "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "nodemon": "^3.1.9",
+    "openai": "^4.90.0",
     "sqlite3": "^5.1.7"
   }
 }
