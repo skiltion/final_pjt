@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>레시피 추천 & 게시판</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+    <div class="auth-buttons">
+        <button class="login-btn" onclick="location.href='login.html'">로그인</button>
+        <button class="register-btn" onclick="location.href='register.html'">회원가입</button>
+        <button class="user-info-btn" onclick="location.href='user-info.html'">회원정보</button>
+        <button class="logout-btn" onclick="logout()">로그아웃</button>
+    </div>
+    
+    <div class="container">
+        <div class="recipe-container">
+            <section class="recipe-section">
+                <h2>레시피 추천</h2>
+                <form id="recipe-form">
+                    <input type="text" id="tastePreference" placeholder="입맛을 입력하세요" required>
+                    <input type="text" id="dishName" placeholder="요리명을 입력하세요" required>
+                    <button type="submit">레시피 생성</button>
+                </form>
+            </section>
+            <section class="recipe-output">
+                <h2 class="centered">생성된 레시피</h2>
+                <div id="recipe-output"></div>
+            </section>
+        </div>
+        
+        <!-- 게시글 영역 -->
+        <section class="posts">
+            <h2 class="centered">게시글</h2>
+            <form id="post-form">
+                <textarea id="postContent" placeholder="게시글을 작성하세요" required></textarea>
+                <button type="submit">게시글 작성</button>
+            </form>
+            <div id="post-list"></div>
+        </section>
+    </div>
+    <script>
+document.addEventListener("DOMContentLoaded", () => {
+  const token = localStorage.getItem("token");
+
+  const loginBtn = document.querySelector(".login-btn");
+  const registerBtn = document.querySelector(".register-btn");
+  const userInfoBtn = document.querySelector(".user-info-btn");
+  const logoutBtn = document.querySelector(".logout-btn");
+
+  if (token) {
+    // 로그인 상태 -> 로그인/회원가입 버튼 숨기고, 회원정보/로그아웃 버튼 표시
+    loginBtn.style.display = "none";
+    registerBtn.style.display = "none";
+    userInfoBtn.style.display = "block";
+    logoutBtn.style.display = "block";
+  } else {
+    // 로그아웃 상태 -> 로그인/회원가입 버튼 표시하고, 회원정보/로그아웃 버튼 숨기기
+    loginBtn.style.display = "block";
+    registerBtn.style.display = "block";
+    userInfoBtn.style.display = "none";
+    logoutBtn.style.display = "none";
+  }
+});
+
+// 🔴 로그아웃 버튼 기능 추가
+function logout() {
+  localStorage.removeItem("token"); // 토큰 삭제
+  window.location.reload(); // 페이지 새로고침하여 UI 업데이트
+}
+
+document.getElementById("recipe-form").addEventListener("submit", async function(event) {
+  event.preventDefault(); // 🔥 폼 자동 제출 방지
+
+  const tastePreference = document.getElementById("tastePreference").value;
+  const dishName = document.getElementById("dishName").value;
+  const token = localStorage.getItem("token"); // 저장된 JWT 토큰 가져오기
+
+  if (!tastePreference || !dishName) {
+    alert("입맛과 요리명을 입력해주세요.");
+    return;
+  }
+
+  const response = await fetch("http://localhost:3000/generate-recipe", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": token ? `Bearer ${token}` : "", // 토큰이 있을 경우만 추가
+    },
+    body: JSON.stringify({ tastePreference, dishName }),
+  });
+
+  const data = await response.json();
+  const outputElement = document.getElementById("recipe-output"); // ✅ 여기 수정
+
+  if (response.status === 401) {
+    outputElement.innerText = "로그인을 해주세요.";
+  } else {
+    outputElement.innerText = data.recipe || "레시피 생성 실패";
+  }
+});
+    </script>
+</body>
+</html>
