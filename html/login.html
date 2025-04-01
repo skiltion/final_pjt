@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로그인</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f4f4f4;
+            position: relative;
+        }
+        .container {
+            width: 80%;
+            max-width: 400px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        input, button {
+            width: 90%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>로그인</h2>
+        <input type="email" id="email" placeholder="이메일을 입력하세요">
+        <input type="password" id="password" placeholder="비밀번호를 입력하세요">
+        <button type="button" id="loginBtn">로그인</button>
+        <button type="button" onclick="location.href='register.html'">회원가입</button>
+        <button type="button" onclick="location.href='index.html'">메인화면</button>
+        <p id="loginMessage"></p>
+    </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            document.getElementById("loginBtn").addEventListener("click", loginUser);
+        });
+        
+        async function loginUser() {
+            const email = document.getElementById("email").value;
+            const password = document.getElementById("password").value;
+        
+            if (!email || !password) {
+                document.getElementById("loginMessage").innerText = "이메일과 비밀번호를 입력하세요.";
+                return;
+            }
+        
+            try {
+                const response = await fetch("http://localhost:3000/login", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+        
+                if (!response.ok) {
+                    const errorData = await response.text();
+                    alert("로그인 실패: " + errorData);
+                    return;
+                }
+        
+                const data = await response.json();
+                localStorage.setItem("token", data.token);
+                alert("로그인 성공!");
+                window.location.href = "index.html";
+        
+            } catch (error) {
+                alert("서버 연결 실패");
+            }
+        }
+        </script>
+</body>
+</html>
