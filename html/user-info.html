@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>사용자 정보</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f4f4f4;
+        }
+        .container {
+            width: 80%;
+            max-width: 400px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        button {
+            width: 90%;
+            padding: 10px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>사용자 정보</h2>
+        <p><strong>이메일:</strong> <span id="userEmail">로딩 중...</span></p>
+        <button onclick="logout()">로그아웃</button>
+        <button onclick="location.href='index.html'">메인 화면</button>
+    </div>
+
+    <script>
+        async function getUserInfo() {
+            const token = localStorage.getItem("token");
+            if (!token) {
+                alert("로그인이 필요합니다.");
+                window.location.href = "login.html";
+                return;
+            }
+
+            try {
+                const response = await fetch("http://localhost:3000/user-info", {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error("사용자 정보를 가져올 수 없습니다.");
+                }
+
+                const data = await response.json();
+                document.getElementById("userEmail").innerText = data.email;
+            } catch (error) {
+                console.error("오류 발생:", error);
+                alert("사용자 정보를 불러오는 데 실패했습니다.");
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem("token");
+            alert("로그아웃되었습니다.");
+            window.location.href = "login.html";
+        }
+
+        getUserInfo();
+    </script>
+</body>
+</html>
