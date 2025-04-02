@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>레시피 추천 기록</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f4f4f4;
+        }
+        .container {
+            width: 80%;
+            max-width: 600px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        .recipe-list {
+            margin-top: 20px;
+        }
+        .recipe-item {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+        }
+        .recipe-item:last-child {
+            border-bottom: none;
+        }
+        .back-button {
+            display: block;
+            width: 200px;
+            height: 50px;
+            margin: 20px auto 0;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .back-button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>레시피 추천 기록</h2>
+        <div id="recipe-list" class="recipe-list">불러오는 중...</div>
+        <button class="back-button" onclick="location.href='index.html'">메인으로 돌아가기</button>
+    </div>
+    
+    <script>
+        document.addEventListener("DOMContentLoaded", async () => {
+            const token = localStorage.getItem("token");
+            if (!token) {
+                alert("로그인이 필요합니다.");
+                location.href = "login.html";
+                return;
+            }
+
+            try {
+                const response = await fetch("http://localhost:3000/recipes", {
+                    method: "GET",
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+
+                if (!response.ok) throw new Error("레시피 기록을 불러오지 못했습니다.");
+                
+                const data = await response.json();
+                const recipeList = document.getElementById("recipe-list");
+                
+                if (!data.recipes || data.recipes.length === 0) {
+                    recipeList.innerHTML = "저장된 레시피가 없습니다.";
+                    return;
+                }
+
+                recipeList.innerHTML = "";
+                data.recipes.forEach(recipe => {
+                    const recipeItem = document.createElement("div");
+                    recipeItem.classList.add("recipe-item");
+                    recipeItem.innerHTML = `
+                        <h3>${recipe.dish_name}</h3>
+                        <p><strong>입맛:</strong> ${recipe.taste_preference}</p>
+                        <p><strong>레시피:</strong> ${recipe.recipe}</p>
+                        <p><small>생성 날짜: ${new Date(recipe.created_at).toLocaleString()}</small></p>
+                    `;
+                    recipeList.appendChild(recipeItem);
+                });
+            } catch (error) {
+                console.error("레시피 기록 불러오기 실패:", error);
+                document.getElementById("recipe-list").innerHTML = "레시피 기록을 불러올 수 없습니다.";
+            }
+        });
+    </script>
+</body>
+</html>
