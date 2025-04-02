@@ -26,14 +26,14 @@ function authenticateToken(req, res, next) {
 
   jwt.verify(token.replace("Bearer ", ""), process.env.JWT_SECRET, (err, user) => {
     if (err) {
+      console.error("JWT 검증 실패:", err);  // 에러 로그 추가
       return res.status(403).json({ error: "유효하지 않은 토큰입니다." });
     }
+
     req.user = user;
-    console.log("Decoded User:", req.user); // 🔍 디버깅용 로그
     next();
   });
 }
-
 // 이메일 형식 검사 함수
 function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -41,6 +41,7 @@ function isValidEmail(email) {
 }
 
 app.post("/generate-recipe", authenticateToken, async (req, res) => {
+  
   const { tastePreference, dishName } = req.body;
 
   // 🔥 로그인되지 않은 경우 즉시 반환
@@ -67,6 +68,7 @@ app.post("/generate-recipe", authenticateToken, async (req, res) => {
 
     console.log("Saving Recipe for User ID:", req.user.id);
 
+    if (req.user) {
     db.run(
       "INSERT INTO recipes (user_id, dish_name, taste_preference, recipe, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
       [req.user.id, dishName, tastePreference, recipe], 
@@ -75,7 +77,7 @@ app.post("/generate-recipe", authenticateToken, async (req, res) => {
           console.error("Error saving recipe:", err);
         }
       }
-    );
+    )};
 
     res.json({ recipe });
   } catch (error) {
@@ -83,8 +85,6 @@ app.post("/generate-recipe", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to generate recipe" });
   }
 });
-
-
 
 // 사용자의 추천 기록 조회 API (로그인한 사용자만 조회 가능)
 app.get("/recipes", authenticateToken, (req, res) => {
@@ -100,7 +100,6 @@ app.get("/recipes", authenticateToken, (req, res) => {
   });
 });
 
-// 회원가입 API
 app.post("/register", async (req, res) => {
   const { email, password } = req.body;
   
@@ -115,18 +114,28 @@ app.post("/register", async (req, res) => {
   }
 
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    db.run(
-      "INSERT INTO users (email, password, created_at) VALUES (?, ?, datetime('now'))",
-      [email, hashedPassword],
-      function (err) {
-        if (err) {
-          return res.status(500).json({ error: "Failed to register user." });
-        }
-        res.status(201).json({ message: "User registered successfully." });
+    // 이메일 중복 확인
+    db.get("SELECT * FROM users WHERE email = ?", [email], async (err, user) => {
+      if (err) {
+        return res.status(500).json({ error: "Server error." });
       }
-    );
+      if (user) {
+        return res.status(400).json({ error: "Email is already registered." });
+      }
+
+      // 비밀번호 해싱 후 사용자 저장
+      const hashedPassword = await bcrypt.hash(password, 10);
+      db.run(
+        "INSERT INTO users (email, password, created_at) VALUES (?, ?, datetime('now'))",
+        [email, hashedPassword],
+        function (err) {
+          if (err) {
+            return res.status(500).json({ error: "Failed to register user." });
+          }
+          res.status(201).json({ message: "User registered successfully." });
+        }
+      );
+    });
   } catch (error) {
     console.error("Error registering user:", error);
     res.status(500).json({ error: "Server error." });
@@ -161,30 +170,27 @@ app.post("/login", async (req, res) => {
   });
 });
 
-// 게시글 작성 API (로그인 필요)
 app.post("/posts", authenticateToken, (req, res) => {
   if (!req.user) return res.status(401).json({ error: "Unauthorized." });
 
-  const { content, recipe_id } = req.body;
-  if (!content) return res.status(400).json({ error: "Content is required." });
-
-  let recipe = null;
-  if (recipe_id) {
-    db.get("SELECT recipe FROM recipes WHERE id = ? AND user_id = ?", [recipe_id, req.user.id], (err, row) => {
-      if (err || !row) return res.status(403).json({ error: "Invalid recipe selection." });
-      recipe = row.recipe;
-    });
+  const { title, content } = req.body;
+  if (!title || !content) {
+    return res.status(400).json({ error: "Title and content are required." });
   }
 
-  db.run("INSERT INTO posts (user_id, content, recipe) VALUES (?, ?, ?)", [req.user.id, content, recipe], function (err) {
-    if (err) return res.status(500).json({ error: "Failed to create post." });
-    res.status(201).json({ message: "Post created successfully.", post_id: this.lastID });
-  });
+  db.run(
+    "INSERT INTO posts (user_id, title, content, created_at) VALUES (?, ?, ?, datetime('now'))",
+    [req.user.id, title, content],
+    function (err) {
+      if (err) return res.status(500).json({ error: "Failed to create post." });
+      res.status(201).json({ message: "Post created successfully.", post_id: this.lastID });
+    }
+  );
 });
 
 // 게시글 전체 조회 API
 app.get("/posts", (req, res) => {
-  db.all("SELECT id, user_id, content, recipe FROM posts ORDER BY id DESC", [], (err, rows) => {
+  db.all("SELECT id, user_id, title, content, created_at FROM posts ORDER BY id DESC", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "Failed to retrieve posts." });
     res.json({ posts: rows });
   });
@@ -193,25 +199,32 @@ app.get("/posts", (req, res) => {
 // 특정 게시글 조회 API
 app.get("/posts/:id", (req, res) => {
   const { id } = req.params;
-  db.get("SELECT id, user_id, content, recipe FROM posts WHERE id = ?", [id], (err, row) => {
+  db.get("SELECT id, user_id, title, content, created_at FROM posts WHERE id = ?", [id], (err, row) => {
     if (err) return res.status(500).json({ error: "Failed to retrieve post." });
     if (!row) return res.status(404).json({ error: "Post not found." });
     res.json({ post: row });
   });
 });
 
+
 // 게시글 수정 API (작성자만 가능)
 app.put("/posts/:id", authenticateToken, (req, res) => {
   if (!req.user) return res.status(401).json({ error: "Unauthorized." });
 
   const { id } = req.params;
-  const { content } = req.body;
+  const { title, content } = req.body;
+  if (!title || !content) {
+    return res.status(400).json({ error: "Title and content are required." });
+  }
 
-  db.get("SELECT * FROM posts WHERE id = ?", [id], (err, post) => {
-    if (err || !post) return res.status(404).json({ error: "Post not found." });
-    if (post.user_id !== req.user.id) return res.status(403).json({ error: "You can only edit your own posts." });
+  db.get("SELECT user_id FROM posts WHERE id = ?", [id], (err, post) => {
+    if (err) return res.status(500).json({ error: "Failed to retrieve post." });
+    if (!post) return res.status(404).json({ error: "Post not found." });
+    if (post.user_id !== req.user.id) {
+      return res.status(403).json({ error: "You can only edit your own posts." });
+    }
 
-    db.run("UPDATE posts SET content = ? WHERE id = ?", [content, id], (err) => {
+    db.run("UPDATE posts SET title = ?, content = ? WHERE id = ?", [title, content, id], (err) => {
       if (err) return res.status(500).json({ error: "Failed to update post." });
       res.json({ message: "Post updated successfully." });
     });
@@ -224,9 +237,12 @@ app.delete("/posts/:id", authenticateToken, (req, res) => {
 
   const { id } = req.params;
 
-  db.get("SELECT * FROM posts WHERE id = ?", [id], (err, post) => {
-    if (err || !post) return res.status(404).json({ error: "Post not found." });
-    if (post.user_id !== req.user.id) return res.status(403).json({ error: "You can only delete your own posts." });
+  db.get("SELECT user_id FROM posts WHERE id = ?", [id], (err, post) => {
+    if (err) return res.status(500).json({ error: "Failed to retrieve post." });
+    if (!post) return res.status(404).json({ error: "Post not found." });
+    if (post.user_id !== req.user.id) {
+      return res.status(403).json({ error: "You can only delete your own posts." });
+    }
 
     db.run("DELETE FROM posts WHERE id = ?", [id], (err) => {
       if (err) return res.status(500).json({ error: "Failed to delete post." });
@@ -235,17 +251,16 @@ app.delete("/posts/:id", authenticateToken, (req, res) => {
   });
 });
 
-// 사용자 정보 조회 API
 app.get("/user-info", authenticateToken, (req, res) => {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized." });
   }
 
-  db.get("SELECT email, created_at FROM users WHERE id = ?", [req.user.id], (err, user) => {
+  db.get("SELECT id, email, created_at FROM users WHERE id = ?", [req.user.id], (err, user) => {
     if (err || !user) {
       return res.status(500).json({ error: "Failed to retrieve user info." });
     }
-    res.json({ email: user.email, created_at: user.created_at });
+    res.json({ id: user.id, email: user.email, created_at: user.created_at });
   });
 });
 
