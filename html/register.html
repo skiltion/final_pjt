@@ -48,45 +48,50 @@
         <h2>회원가입</h2>
         <input type="email" id="email" placeholder="이메일을 입력하세요">
         <input type="password" id="password" placeholder="비밀번호를 입력하세요">
-        <button type="button" onclick="registerUser()">회원가입</button>
+        <button type="button" onclick="event.preventDefault(); registerUser();">회원가입</button>
         <button type="button" onclick="location.href='login.html'">로그인</button>
         <button type="button" onclick="location.href='index.html'">메인화면</button>
         <p id="registerMessage"></p>
     </div>
 
     <script>
-        async function registerUser() {
-            const email = document.getElementById("email").value;
-            const password = document.getElementById("password").value;
+async function registerUser() {
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
 
-            if (!email || !password) {
-                document.getElementById("registerMessage").innerText = "이메일과 비밀번호를 입력하세요.";
-                return;
-            }
+    if (!email || !password) {
+        document.getElementById("registerMessage").innerText = "이메일과 비밀번호를 입력하세요.";
+        return;
+    }
 
-            try {
-                const response = await fetch("http://localhost:3000/register", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ email, password })
-                });
+    try {
+        const response = await fetch("http://localhost:3000/register", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ email, password })
+        });
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    alert(errorData.message || "회원가입 실패");
-                    return;
-                }
+        const data = await response.json();
+        console.log("서버 응답:", data); // 추가된 부분
 
-                alert("회원가입 성공!");
-                window.location.href = "login.html"; // 로그인 페이지로 이동
-
-            } catch (error) {
-                console.error("회원가입 요청 오류:", error);
-                alert("서버 연결 실패");
-            }
+        if (!response.ok) {
+            alert(data.message || "회원가입 실패");
+            return;
         }
+
+        alert("회원가입 성공!");
+        console.log("페이지 이동 시도...");
+        window.location.href = "login.html";
+        console.log("페이지 이동 코드 실행됨!");
+
+    } catch (error) {
+        console.error("회원가입 요청 오류:", error);
+        alert("서버 연결 실패");
+    }
+}
+
     </script>
 </body>
 </html>
