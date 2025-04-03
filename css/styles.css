@@ -72,6 +72,8 @@ body {
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     text-align: center;
     margin-top: 20px;
+    max-height: 600px;
+    overflow-y: auto;
 }
 
 .post-item {
@@ -149,4 +151,66 @@ button {
 
 button:hover {
     background-color: #218838;
+}
+
+.comment-toggle {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    width: 45px;
+    height: 45px;
+    padding: 5px 10px;
+    font-size: 12px;
+    background-color: #17a2b8;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.comment-delete {
+    background-color: #dc3545; /* 빨간색 */
+    color: white;
+    border: none;
+    padding: 3px 6px;
+    font-size: 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    width: 40px;
+    float: right; /* 댓글 오른쪽 정렬 */
+}
+
+
+.comment-toggle:hover {
+    background-color: #138496;
+}
+
+@media (max-width: 1190px) {
+    .auth-buttons {
+        position: static;
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        text-align: center;
+        width: 90%;
+    }
+}
+
+@media (max-width: 768px) {
+    .auth-buttons {
+        position: static;
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        text-align: center;
+        width: 100%;
+    }
+    .recipe-container {
+        flex-direction: column;
+        align-items: center;
+    }
+    .recipe-section,
+    .recipe-output {
+        width: 100%;
+    }
 }
