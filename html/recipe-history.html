@@ -27,14 +27,43 @@
         }
         .recipe-list {
             margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            background: #fff;
         }
         .recipe-item {
             padding: 10px;
             border-bottom: 1px solid #ddd;
             text-align: left;
+            position: relative;
         }
         .recipe-item:last-child {
             border-bottom: none;
+        }
+        .delete-btn, .share-btn {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            background-color: #ff4d4d;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .delete-btn:hover {
+            background-color: #cc0000;
+        }
+        .share-btn {
+            right: 80px;
+            background-color: #4CAF50;
+        }
+        .share-btn:hover {
+            background-color: #45a049;
         }
         .back-button {
             display: block;
@@ -69,38 +98,105 @@
                 return;
             }
 
-            try {
-                const response = await fetch("http://localhost:3000/recipes", {
-                    method: "GET",
-                    headers: { "Authorization": `Bearer ${token}` }
-                });
+            async function loadRecipes() {
+                try {
+                    const response = await fetch("http://localhost:3000/recipes", {
+                        method: "GET",
+                        headers: { "Authorization": `Bearer ${token}` }
+                    });
 
-                if (!response.ok) throw new Error("레시피 기록을 불러오지 못했습니다.");
-                
-                const data = await response.json();
-                const recipeList = document.getElementById("recipe-list");
-                
-                if (!data.recipes || data.recipes.length === 0) {
-                    recipeList.innerHTML = "저장된 레시피가 없습니다.";
-                    return;
+                    if (!response.ok) throw new Error("레시피 기록을 불러오지 못했습니다.");
+                    
+                    const data = await response.json();
+                    const recipeList = document.getElementById("recipe-list");
+                    
+                    if (!data.recipes || data.recipes.length === 0) {
+                        recipeList.innerHTML = "저장된 레시피가 없습니다.";
+                        return;
+                    }
+
+                    recipeList.innerHTML = "";
+                    data.recipes.forEach(recipe => {
+                        const recipeItem = document.createElement("div");
+                        recipeItem.classList.add("recipe-item");
+                        recipeItem.innerHTML = `
+                            <h3>${recipe.dish_name}</h3>
+                            <p><strong>입맛:</strong> ${recipe.taste_preference}</p>
+                            <p><strong>레시피:</strong> ${recipe.recipe}</p>
+                            <p><small>생성 날짜: ${new Date(recipe.created_at).toLocaleString()}</small></p>
+                            <button class="share-btn" data-id="${recipe.id}">공유</button>
+                            <button class="delete-btn" data-id="${recipe.id}">삭제</button>
+                        `;
+
+                        recipeList.appendChild(recipeItem);
+                    });
+
+                    // 삭제 버튼 이벤트 리스너 추가
+                    document.querySelectorAll(".delete-btn").forEach(button => {
+                        button.addEventListener("click", async (event) => {
+                            const recipeId = event.target.getAttribute("data-id");
+                            if (confirm("정말 삭제하시겠습니까?")) {
+                                await deleteRecipe(recipeId);
+                            }
+                        });
+                    });
+
+                    // 공유 버튼 이벤트 리스너 추가
+                    document.querySelectorAll(".share-btn").forEach(button => {
+                        button.addEventListener("click", async (event) => {
+                            const recipeId = event.target.getAttribute("data-id");
+                            await shareRecipe(recipeId);
+                        });
+                    });
+
+                } catch (error) {
+                    console.error("레시피 기록 불러오기 실패:", error);
+                    document.getElementById("recipe-list").innerHTML = "레시피 기록을 불러올 수 없습니다.";
                 }
-
-                recipeList.innerHTML = "";
-                data.recipes.forEach(recipe => {
-                    const recipeItem = document.createElement("div");
-                    recipeItem.classList.add("recipe-item");
-                    recipeItem.innerHTML = `
-                        <h3>${recipe.dish_name}</h3>
-                        <p><strong>입맛:</strong> ${recipe.taste_preference}</p>
-                        <p><strong>레시피:</strong> ${recipe.recipe}</p>
-                        <p><small>생성 날짜: ${new Date(recipe.created_at).toLocaleString()}</small></p>
-                    `;
-                    recipeList.appendChild(recipeItem);
-                });
-            } catch (error) {
-                console.error("레시피 기록 불러오기 실패:", error);
-                document.getElementById("recipe-list").innerHTML = "레시피 기록을 불러올 수 없습니다.";
             }
+
+            async function deleteRecipe(recipeId) {
+                try {
+                    const response = await fetch(`http://localhost:3000/recipes/${recipeId}`, {
+                        method: "DELETE",
+                        headers: { "Authorization": `Bearer ${token}` }
+                    });
+
+                    if (!response.ok) throw new Error("레시피 삭제 실패");
+
+                    alert("레시피가 삭제되었습니다.");
+                    loadRecipes(); // 삭제 후 목록 다시 불러오기
+                } catch (error) {
+                    console.error("레시피 삭제 실패:", error);
+                    alert("레시피 삭제에 실패했습니다.");
+                }
+            }
+
+            async function shareRecipe(recipeId) {
+    if (!confirm("이 레시피를 공유하시겠습니까?")) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`http://localhost:3000/recipes/${recipeId}/share`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json"
+            }
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "레시피 공유 실패");
+
+        alert("레시피가 게시판에 성공적으로 공유되었습니다!");
+    } catch (error) {
+        console.error("레시피 공유 실패:", error);
+        alert("레시피 공유에 실패했습니다.");
+    }
+}
+
+            loadRecipes(); // 페이지 로드 시 레시피 불러오기
         });
     </script>
 </body>
