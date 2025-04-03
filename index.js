@@ -11,6 +11,7 @@ const app = express();
 const port = 3000;
 const db = new sqlite3.Database("./database.db");
 
+app.use(express.json());
 app.use(cors());
 app.use(bodyParser.json());
 
@@ -19,21 +20,27 @@ const openai = new OpenAI({
 });
 
 function authenticateToken(req, res, next) {
-  const token = req.header("Authorization");
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
   if (!token) {
-    return res.status(401).json({ error: "로그인이 필요합니다." });
+    return res.status(401).json({ error: "Access token required." });
   }
 
-  jwt.verify(token.replace("Bearer ", ""), process.env.JWT_SECRET, (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
-      console.error("JWT 검증 실패:", err);  // 에러 로그 추가
-      return res.status(403).json({ error: "유효하지 않은 토큰입니다." });
+      if (err.name === "TokenExpiredError") {
+        return res.status(401).json({ error: "Token expired. Please log in again." });
+      }
+      return res.status(403).json({ error: "Invalid token." });
     }
 
     req.user = user;
     next();
   });
 }
+
+module.exports = authenticateToken;
 // 이메일 형식 검사 함수
 function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -43,17 +50,20 @@ function isValidEmail(email) {
 app.post("/generate-recipe", authenticateToken, async (req, res) => {
   
   const { tastePreference, dishName } = req.body;
+  console.log("📥 요청 수신:", { tastePreference, dishName });
 
-  // 🔥 로그인되지 않은 경우 즉시 반환
   if (!req.user) {
+    console.log("⛔ 로그인되지 않음");
     return res.status(401).json({ error: "Login required to generate recipe." });
   }
 
   if (!tastePreference || !dishName) {
+    console.log("⛔ tastePreference 또는 dishName 누락");
     return res.status(400).json({ error: "Please provide tastePreference and dishName" });
   }
 
   try {
+    console.log("🔄 OpenAI API 요청 중...");
     const response = await openai.chat.completions.create({ 
       model: "gpt-4",
       messages: [
@@ -64,27 +74,29 @@ app.post("/generate-recipe", authenticateToken, async (req, res) => {
       max_tokens: 50,
     });
 
+    console.log("✅ OpenAI 응답 수신 완료");
     const recipe = response.choices[0]?.message?.content || "레시피 생성 실패";
+    
+    // console.log("💾 DB 저장 중...");
+    // db.run(
+    //   "INSERT INTO recipes (user_id, dish_name, taste_preference, recipe, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
+    //   [req.user.id, dishName, tastePreference, recipe], 
+    //   function (err) {
+    //     if (err) {
+    //       console.error("❌ DB 저장 실패:", err);
+    //     }
+    //   }
+    // );
 
-    console.log("Saving Recipe for User ID:", req.user.id);
+    console.log("📤 응답 반환:", recipe);
+    return res.json({ "recipe": recipe });
 
-    if (req.user) {
-    db.run(
-      "INSERT INTO recipes (user_id, dish_name, taste_preference, recipe, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
-      [req.user.id, dishName, tastePreference, recipe], 
-      function (err) {
-        if (err) {
-          console.error("Error saving recipe:", err);
-        }
-      }
-    )};
-
-    res.json({ recipe });
   } catch (error) {
-    console.error("Error generating recipe:", error);
-    res.status(500).json({ error: "Failed to generate recipe" });
+    console.error("❌ OpenAI API 요청 중 오류 발생:", error);
+    return res.status(500).json({ error: "Failed to generate recipe" });
   }
 });
+
 
 // 사용자의 추천 기록 조회 API (로그인한 사용자만 조회 가능)
 app.get("/recipes", authenticateToken, (req, res) => {
@@ -97,6 +109,62 @@ app.get("/recipes", authenticateToken, (req, res) => {
       return res.status(500).json({ error: "Failed to retrieve recipes." });
     }
     res.json({ recipes: rows });
+  });
+});
+
+// 사용자의 레시피 삭제 API (로그인한 사용자만 가능)
+app.delete("/recipes/:id", authenticateToken, (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Login required to delete recipes." });
+  }
+
+  const recipeId = req.params.id;
+
+  // 해당 레시피가 현재 사용자 소유인지 확인
+  db.get("SELECT * FROM recipes WHERE id = ? AND user_id = ?", [recipeId, req.user.id], (err, recipe) => {
+    if (err) {
+      return res.status(500).json({ error: "Database error while fetching recipe." });
+    }
+
+    if (!recipe) {
+      return res.status(403).json({ error: "You can only delete your own recipes." });
+    }
+
+    // 레시피 삭제
+    db.run("DELETE FROM recipes WHERE id = ?", [recipeId], function (err) {
+      if (err) {
+        return res.status(500).json({ error: "Failed to delete recipe." });
+      }
+      res.json({ message: "Recipe deleted successfully." });
+    });
+  });
+});
+
+// 사용자의 레시피 공유 API (게시글로 등록)
+app.post("/recipes/:id/share", authenticateToken, (req, res) => {
+  const recipeId = req.params.id;
+
+  // 현재 사용자의 레시피인지 확인
+  db.get("SELECT * FROM recipes WHERE id = ? AND user_id = ?", [recipeId, req.user.id], (err, recipe) => {
+      if (err) {
+          return res.status(500).json({ error: "Database error while fetching recipe." });
+      }
+
+      if (!recipe) {
+          return res.status(403).json({ error: "You can only share your own recipes." });
+      }
+
+      // 게시글로 레시피 공유
+      db.run(
+          "INSERT INTO posts (user_id, title, content, created_at) VALUES (?, ?, ?, datetime('now'))",
+          [req.user.id, recipe.dish_name, `입맛: ${recipe.taste_preference}\n\n레시피:\n${recipe.recipe}`],
+          function (err) {
+              if (err) {
+                  return res.status(500).json({ error: "Failed to share recipe as post." });
+              }
+              res.json({ message: "Recipe shared as a post successfully.", post_id: this.lastID });
+          }
+      );
   });
 });
 
@@ -170,6 +238,7 @@ app.post("/login", async (req, res) => {
   });
 });
 
+// 게시글 작성 API
 app.post("/posts", authenticateToken, (req, res) => {
   if (!req.user) return res.status(401).json({ error: "Unauthorized." });
 
@@ -250,6 +319,69 @@ app.delete("/posts/:id", authenticateToken, (req, res) => {
     });
   });
 });
+
+app.get("/posts/:postId/comments", async (req, res) => {
+  const { postId } = req.params;
+
+  db.all(
+      "SELECT comments.id, comments.content, comments.created_at, users.email AS author FROM comments JOIN users ON comments.user_id = users.id WHERE comments.post_id = ? ORDER BY comments.created_at DESC",
+      [postId],
+      (err, rows) => {
+          if (err) {
+              console.error("❌ 댓글 조회 실패:", err.message);
+              return res.status(500).json({ error: "댓글을 불러오는 중 오류 발생" });
+          }
+          res.json({ comments: rows });
+      }
+  );
+});
+
+app.post("/posts/:postId/comments", authenticateToken, (req, res) => {
+  const { postId } = req.params;
+  const { content } = req.body;
+  const userId = req.user.id;
+
+  if (!content) {
+      return res.status(400).json({ error: "댓글 내용을 입력하세요." });
+  }
+
+  db.run(
+      "INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)",
+      [postId, userId, content],
+      function (err) {
+          if (err) {
+              console.error("❌ 댓글 저장 실패:", err.message);
+              return res.status(500).json({ error: "댓글 저장 중 오류 발생" });
+          }
+          res.status(201).json({ message: "댓글이 등록되었습니다.", commentId: this.lastID });
+      }
+  );
+});
+
+app.delete("/comments/:commentId", authenticateToken, (req, res) => {
+  const { commentId } = req.params;
+  const userId = req.user.id;
+
+  db.get("SELECT user_id FROM comments WHERE id = ?", [commentId], (err, row) => {
+      if (err) {
+          console.error("❌ 댓글 조회 실패:", err.message);
+          return res.status(500).json({ error: "댓글 삭제 중 오류 발생" });
+      }
+
+      if (!row || row.user_id !== userId) {
+          return res.status(403).json({ error: "삭제 권한이 없습니다." });
+      }
+
+      db.run("DELETE FROM comments WHERE id = ?", [commentId], function (err) {
+          if (err) {
+              console.error("❌ 댓글 삭제 실패:", err.message);
+              return res.status(500).json({ error: "댓글 삭제 중 오류 발생" });
+          }
+          res.json({ message: "댓글이 삭제되었습니다." });
+      });
+  });
+});
+
 
 app.get("/user-info", authenticateToken, (req, res) => {
   if (!req.user) {
